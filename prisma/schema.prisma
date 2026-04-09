@@ -14,18 +14,73 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id    String @id @default(auto()) @map("_id") @db.ObjectId
-  email String @unique
-  name  String?
-  posts Post[]
+model Workspace {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  variables   Json         @default("{}")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  collections Collection[]
+  requests    ApiRequest[]
+  history     History[]
+
+  @@index([name])
 }
 
-model Post {
-  id        String  @id @default(auto()) @map("_id") @db.ObjectId
-  title     String
-  content   String?
-  published Boolean @default(false)
-  author    User    @relation(fields: [authorId], references: [id])
-  authorId  String  @db.ObjectId
+model Collection {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  workspaceId String       @db.ObjectId
+  parentId    String?      @db.ObjectId
+  sortOrder   Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id])
+  parent      Collection?  @relation("CollectionChildren", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children    Collection[] @relation("CollectionChildren")
+  requests    ApiRequest[]
+
+  @@index([workspaceId])
+  @@index([parentId])
+}
+
+model ApiRequest {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  method       String
+  baseUrl      String?
+  path         String
+  pathVars     Json       @default("[]")
+  queryParams  Json       @default("[]")
+  headers      Json       @default("[]")
+  body         Json?
+  scripts      Json?
+  collectionId String     @db.ObjectId
+  workspaceId  String     @db.ObjectId
+  sortOrder    Int        @default(0)
+  timeoutMs    Int        @default(30000)
+  lastDraft    Json?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  collection   Collection @relation(fields: [collectionId], references: [id])
+  workspace    Workspace  @relation(fields: [workspaceId], references: [id])
+  history      History[]
+
+  @@index([collectionId])
+  @@index([workspaceId])
+}
+
+model History {
+  id               String      @id @default(auto()) @map("_id") @db.ObjectId
+  requestId        String?     @db.ObjectId
+  workspaceId      String      @db.ObjectId
+  requestSnapshot  Json
+  responseSnapshot Json
+  timestamp        DateTime    @default(now())
+  request          ApiRequest? @relation(fields: [requestId], references: [id])
+  workspace        Workspace   @relation(fields: [workspaceId], references: [id])
+
+  @@index([requestId])
+  @@index([workspaceId])
+  @@index([timestamp])
 }

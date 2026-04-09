@@ -1,36 +1,124 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ApiDeDoo
 
-## Getting Started
+ApiDeDoo is a lightweight, self-hosted, browser-based API client inspired by Postman.
 
-First, run the development server:
+## MVP Features
+
+- Multi-workspace support with backend persistence
+- Nested collections and request organization
+- Request builder with:
+	- HTTP methods (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS)
+	- Base URL + path
+	- Path variables
+	- Query params with literal/variable source toggle
+	- Headers with enable/disable and Bearer helper
+	- Body modes: none, JSON, raw, form-data, x-www-form-urlencoded, XML, HTML
+	- Pre-request and post-response scripts
+- Workspace-level variables with template interpolation (`{{variableName}}`)
+- Backend request execution engine with timeout and error handling
+- Response viewer with status, time, size, pretty/raw tabs, copy response
+- Request history and re-run from history snapshots
+- Postman collection import/export compatibility (v2.1)
+- Manual Save flow + draft autosave to DB
+- Desktop-first UI (small screens show desktop-only message)
+
+## Tech Stack
+
+- Next.js 16 (App Router)
+- React 19
+- Prisma + MongoDB
+- TypeScript
+- Vitest for unit testing
+
+## Project Structure
+
+- `app/api/*`: backend route handlers
+- `components/apidedoo/*`: UI components and workbench shell
+- `lib/server/*`: modular backend services (normalization, execution, Postman conversion)
+- `lib/client/*`: frontend API clients and utilities
+- `lib/types/apidedo.ts`: shared app types
+- `prisma/schema.prisma`: data models for workspaces/collections/requests/history
+- `docs/scripting.md`: script API reference
+
+## Data Models
+
+Prisma models included:
+
+- `Workspace`
+- `Collection`
+- `ApiRequest`
+- `History`
+
+All app state is persisted in MongoDB, with autosaved draft state for active requests.
+
+## Quick Start
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Set `DATABASE_URL` in `.env`.
+
+3. Sync schema and generate client:
+
+```bash
+npm run prisma:push
+```
+
+4. Start dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tests
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run lint and tests:
 
-## Learn More
+```bash
+npm run lint
+npm run test
+```
 
-To learn more about Next.js, take a look at the following resources:
+Run live JSONPlaceholder API coverage (GET/POST/PUT/PATCH/DELETE + filtering + nested routes):
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run test:jsonplaceholder
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Production build check:
 
-## Deploy on Vercel
+```bash
+npm run build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## JSONPlaceholder Workspace Bootstrap
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project includes a ready-to-import collection at `docs/jsonplaceholder-workspace.postman_collection.json`.
+
+To create a new workspace and import that collection automatically through local API routes:
+
+```bash
+npm run workspace:jsonplaceholder
+```
+
+Optional environment variables:
+
+- `APIDEDOO_BASE_URL` (default `http://localhost:3000`)
+- `APIDEDOO_WORKSPACE_NAME` (default `JSONPlaceholder API Types`)
+
+Example:
+
+```bash
+APIDEDOO_BASE_URL=http://localhost:3000 APIDEDOO_WORKSPACE_NAME="JSONPlaceholder QA" npm run workspace:jsonplaceholder
+```
+
+## Scripting
+
+Script docs are in `docs/scripting.md`.
+
+Use request scripts to read/write workspace variables with `pm.variables.*`.

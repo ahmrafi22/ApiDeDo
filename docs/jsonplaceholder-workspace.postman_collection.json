@@ -1,0 +1,147 @@
+{
+  "info": {
+    "name": "JSONPlaceholder API Types",
+    "description": "Workspace template for testing JSONPlaceholder CRUD, filtering, and nested resource routes in ApiDeDoo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get Resource",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "https://jsonplaceholder.typicode.com/posts/1"
+      }
+    },
+    {
+      "name": "List Resources",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "https://jsonplaceholder.typicode.com/posts"
+      }
+    },
+    {
+      "name": "Create Resource",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-type",
+            "value": "application/json; charset=UTF-8"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"foo\",\n  \"body\": \"bar\",\n  \"userId\": 1\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "https://jsonplaceholder.typicode.com/posts"
+      }
+    },
+    {
+      "name": "Update Resource",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-type",
+            "value": "application/json; charset=UTF-8"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": 1,\n  \"title\": \"foo\",\n  \"body\": \"bar\",\n  \"userId\": 1\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "https://jsonplaceholder.typicode.com/posts/1"
+      }
+    },
+    {
+      "name": "Patch Resource",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-type",
+            "value": "application/json; charset=UTF-8"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"foo\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "https://jsonplaceholder.typicode.com/posts/1"
+      }
+    },
+    {
+      "name": "Delete Resource",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "https://jsonplaceholder.typicode.com/posts/1"
+      }
+    },
+    {
+      "name": "Filter Resources (userId=1)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "https://jsonplaceholder.typicode.com/posts?userId=1"
+      }
+    },
+    {
+      "name": "Nested: /posts/1/comments",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "https://jsonplaceholder.typicode.com/posts/1/comments"
+      }
+    },
+    {
+      "name": "Nested: /albums/1/photos",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "https://jsonplaceholder.typicode.com/albums/1/photos"
+      }
+    },
+    {
+      "name": "Nested: /users/1/albums",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "https://jsonplaceholder.typicode.com/users/1/albums"
+      }
+    },
+    {
+      "name": "Nested: /users/1/todos",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "https://jsonplaceholder.typicode.com/users/1/todos"
+      }
+    },
+    {
+      "name": "Nested: /users/1/posts",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "https://jsonplaceholder.typicode.com/users/1/posts"
+      }
+    }
+  ]
+}

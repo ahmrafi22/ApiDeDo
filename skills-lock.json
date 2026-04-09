@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "emilkowal-animations": {
+      "source": "pproenca/dot-skills",
+      "sourceType": "github",
+      "computedHash": "53756b4bc96f580b3db5eeb0d487473f72bbbf9841297cef30fbec7b1ee43bd8"
+    },
+    "ui-ux-pro-max": {
+      "source": "smithery.ai",
+      "sourceType": "well-known",
+      "computedHash": "8cd1b83a60e8d0a95c332d2baeffad9053617b286beb96bbe13e818507343f47"
+    }
+  }
+}
