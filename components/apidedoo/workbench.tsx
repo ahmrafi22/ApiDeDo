@@ -9,7 +9,6 @@ import {
   createWorkspace,
   downloadPostmanCollection,
   executeRequest,
-  getRequestHistory,
   getWorkspace,
   importPostmanCollection,
   listWorkspaces,
@@ -38,6 +37,55 @@ import { ToastStack, type ToastItem } from "@/components/apidedoo/toast-stack";
 import { TopBar } from "@/components/apidedoo/topbar";
 
 const ACCENT_STORAGE_KEY = "apidedoo-accent";
+const REQUEST_RUNTIME_STORAGE_PREFIX = "apidedoo-request-runtime";
+const MAX_LOCAL_HISTORY_RECORDS = 40;
+
+interface RequestRuntimeState {
+  latestResponse: HistoryRecord["responseSnapshot"] | null;
+  history: HistoryRecord[];
+  scriptLogs: string[];
+}
+
+type RuntimeStateByRequest = Record<string, RequestRuntimeState>;
+
+function getRuntimeStorageKey(workspaceId: string): string {
+  return `${REQUEST_RUNTIME_STORAGE_PREFIX}:${workspaceId}`;
+}
+
+function parseRuntimeState(raw: string | null): RuntimeStateByRequest {
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    const output: RuntimeStateByRequest = {};
+    for (const [requestId, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        continue;
+      }
+
+      const candidate = value as Partial<RequestRuntimeState>;
+      output[requestId] = {
+        latestResponse: candidate.latestResponse ?? null,
+        history: Array.isArray(candidate.history)
+          ? (candidate.history as HistoryRecord[]).slice(0, MAX_LOCAL_HISTORY_RECORDS)
+          : [],
+        scriptLogs: Array.isArray(candidate.scriptLogs)
+          ? candidate.scriptLogs.filter((line): line is string => typeof line === "string")
+          : [],
+      };
+    }
+
+    return output;
+  } catch {
+    return {};
+  }
+}
 
 function makeId(prefix: string): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -153,7 +201,6 @@ export function ApiDeDooWorkbench() {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceDetails | null>(null);
-  const [workspaceNameDraft, setWorkspaceNameDraft] = useState("");
 
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
@@ -163,6 +210,7 @@ export function ApiDeDooWorkbench() {
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [latestResponse, setLatestResponse] = useState<HistoryRecord["responseSnapshot"] | null>(null);
   const [scriptLogs, setScriptLogs] = useState<string[]>([]);
+  const [runtimeStateByRequest, setRuntimeStateByRequest] = useState<RuntimeStateByRequest>({});
 
   const [variableRows, setVariableRows] = useState<VariableRow[]>([{ id: makeId("var"), key: "", value: "" }]);
 
@@ -221,7 +269,6 @@ export function ApiDeDooWorkbench() {
       },
     ) => {
       setWorkspace(nextWorkspace);
-      setWorkspaceNameDraft(nextWorkspace.name);
       setVariableRows(workspaceVariablesToRows(nextWorkspace));
 
       const nextCollectionId =
@@ -264,25 +311,74 @@ export function ApiDeDooWorkbench() {
     [hydrateWorkspace],
   );
 
-  const refreshHistory = useCallback(
-    async (requestId: string | null) => {
-      if (!requestId) {
-        setHistory([]);
-        return;
+  const updateRuntimeStateForRequest = useCallback(
+    (requestId: string, updater: (current: RequestRuntimeState) => RequestRuntimeState) => {
+      setRuntimeStateByRequest((current) => {
+        const existing =
+          current[requestId] ?? {
+            latestResponse: null,
+            history: [],
+            scriptLogs: [],
+          };
+
+        return {
+          ...current,
+          [requestId]: updater(existing),
+        };
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setRuntimeStateByRequest({});
+      return;
+    }
+
+    const stored = parseRuntimeState(
+      window.localStorage.getItem(getRuntimeStorageKey(activeWorkspaceId)),
+    );
+    setRuntimeStateByRequest(stored);
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        getRuntimeStorageKey(activeWorkspaceId),
+        JSON.stringify(runtimeStateByRequest),
+      );
+    } catch {
+      // Ignore local storage quota errors.
+    }
+  }, [activeWorkspaceId, runtimeStateByRequest]);
+
+  useEffect(() => {
+    if (!workspace) {
+      return;
+    }
+
+    const validRequestIds = new Set(workspace.requests.map((request) => request.id));
+    setRuntimeStateByRequest((current) => {
+      let changed = false;
+      const nextState: RuntimeStateByRequest = {};
+
+      for (const [requestId, requestState] of Object.entries(current)) {
+        if (!validRequestIds.has(requestId)) {
+          changed = true;
+          continue;
+        }
+
+        nextState[requestId] = requestState;
       }
 
-      try {
-        const payload = await getRequestHistory(requestId);
-        setHistory(payload);
-      } catch (error) {
-        pushToast(
-          error instanceof Error ? error.message : "Could not load request history.",
-          "error",
-        );
-      }
-    },
-    [pushToast],
-  );
+      return changed ? nextState : current;
+    });
+  }, [workspace]);
 
   useEffect(() => {
     const cachedAccent = window.localStorage.getItem(ACCENT_STORAGE_KEY);
@@ -385,15 +481,28 @@ export function ApiDeDooWorkbench() {
     if (!selectedRequest) {
       setRequestNameDraft("");
       setRequestDraft(null);
-      setHistory([]);
+      setHasUnsavedRequestChanges(false);
       return;
     }
 
     setRequestNameDraft(selectedRequest.name);
     setRequestDraft(selectedRequest.lastDraft ?? selectedRequest.draft);
     setHasUnsavedRequestChanges(false);
-    void refreshHistory(selectedRequest.id);
-  }, [refreshHistory, selectedRequest]);
+  }, [selectedRequest]);
+
+  useEffect(() => {
+    if (!selectedRequestId) {
+      setLatestResponse(null);
+      setHistory([]);
+      setScriptLogs([]);
+      return;
+    }
+
+    const runtimeState = runtimeStateByRequest[selectedRequestId];
+    setLatestResponse(runtimeState?.latestResponse ?? null);
+    setHistory(runtimeState?.history ?? []);
+    setScriptLogs(runtimeState?.scriptLogs ?? []);
+  }, [runtimeStateByRequest, selectedRequestId]);
 
   useEffect(() => {
     if (!selectedRequestId || !requestDraft || !hasUnsavedRequestChanges) {
@@ -450,38 +559,6 @@ export function ApiDeDooWorkbench() {
 
     setActiveModal({ kind: "delete-workspace" });
   }, [activeWorkspaceId]);
-
-  const handleWorkspaceNameCommit = useCallback(async () => {
-    if (!activeWorkspaceId || !workspace) {
-      return;
-    }
-
-    const trimmed = workspaceNameDraft.trim();
-    if (!trimmed || trimmed === workspace.name) {
-      setWorkspaceNameDraft(workspace.name);
-      return;
-    }
-
-    try {
-      const updated = await updateWorkspace(activeWorkspaceId, { name: trimmed });
-      hydrateWorkspace(updated, {
-        preferredCollectionId: selectedCollectionId,
-        preferredRequestId: selectedRequestId,
-      });
-      pushToast("Workspace name updated.", "success");
-    } catch (error) {
-      setWorkspaceNameDraft(workspace.name);
-      pushToast(error instanceof Error ? error.message : "Failed to rename workspace.", "error");
-    }
-  }, [
-    activeWorkspaceId,
-    hydrateWorkspace,
-    pushToast,
-    selectedCollectionId,
-    selectedRequestId,
-    workspace,
-    workspaceNameDraft,
-  ]);
 
   const handleCreateCollection = useCallback(
     async (parentId: string | null) => {
@@ -684,8 +761,11 @@ export function ApiDeDooWorkbench() {
         await loadWorkspace(workspace.id, {
           preferredCollectionId: selectedCollectionId,
         });
-        setLatestResponse(null);
-        setScriptLogs([]);
+        setRuntimeStateByRequest((current) => {
+          const nextState = { ...current };
+          delete nextState[activeModal.requestId];
+          return nextState;
+        });
         pushToast("Request deleted.", "success");
         setActiveModal(null);
       }
@@ -852,11 +932,17 @@ export function ApiDeDooWorkbench() {
           requestId: selectedRequestId,
           draft: draftOverride ?? requestDraft,
           persistDraft: true,
+          persistHistory: false,
         });
 
-        setLatestResponse(payload.responseSnapshot);
-        setHistory((current) => [payload.history, ...current.filter((entry) => entry.id !== payload.history.id)]);
-        setScriptLogs(payload.scriptLogs);
+        updateRuntimeStateForRequest(selectedRequestId, (current) => ({
+          latestResponse: payload.responseSnapshot,
+          history: [
+            payload.history,
+            ...current.history.filter((entry) => entry.id !== payload.history.id),
+          ].slice(0, MAX_LOCAL_HISTORY_RECORDS),
+          scriptLogs: payload.scriptLogs,
+        }));
 
         if (workspace && JSON.stringify(workspace.variables) !== JSON.stringify(payload.updatedVariables)) {
           setWorkspace((current) =>
@@ -881,7 +967,7 @@ export function ApiDeDooWorkbench() {
         setIsExecuting(false);
       }
     },
-    [pushToast, requestDraft, selectedRequestId, workspace],
+    [pushToast, requestDraft, selectedRequestId, updateRuntimeStateForRequest, workspace],
   );
 
   const handleInjectAuthHeader = useCallback(() => {
@@ -1131,7 +1217,7 @@ export function ApiDeDooWorkbench() {
         <TopBar
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
-          workspaceName={workspaceNameDraft}
+          workspaceName={workspace?.name ?? ""}
           accentColor={accentColor}
           accentPalette={DEFAULT_ACCENT_COLORS}
           canSaveRequest={Boolean(selectedRequestId && requestDraft)}
@@ -1140,8 +1226,6 @@ export function ApiDeDooWorkbench() {
           onCreateWorkspace={openCreateWorkspaceModal}
           onDeleteWorkspace={handleDeleteWorkspace}
           onWorkspaceSelect={handleWorkspaceSwitch}
-          onWorkspaceNameChange={setWorkspaceNameDraft}
-          onWorkspaceNameCommit={handleWorkspaceNameCommit}
           onAccentColorChange={setAccentColor}
           onSaveRequest={handleSaveRequest}
           onImportPostman={handleImportPostman}
@@ -1220,8 +1304,15 @@ export function ApiDeDooWorkbench() {
             history={history}
             scriptLogs={scriptLogs}
             onUseHistoryDraft={(historyEntry) => {
+              if (!selectedRequestId) {
+                return;
+              }
+
               setRequestDraft(historyEntry.requestSnapshot.draft);
-              setLatestResponse(historyEntry.responseSnapshot);
+              updateRuntimeStateForRequest(selectedRequestId, (current) => ({
+                ...current,
+                latestResponse: historyEntry.responseSnapshot,
+              }));
               setHasUnsavedRequestChanges(true);
               pushToast("History snapshot loaded into editor.", "info");
             }}

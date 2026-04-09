@@ -16,8 +16,6 @@ interface TopBarProps {
   onCreateWorkspace: () => void;
   onDeleteWorkspace: () => void;
   onWorkspaceSelect: (workspaceId: string) => void;
-  onWorkspaceNameChange: (nextName: string) => void;
-  onWorkspaceNameCommit: () => void;
   onAccentColorChange: (color: string) => void;
   onSaveRequest: () => void;
   onImportPostman: (file: File) => void;
@@ -36,8 +34,6 @@ export function TopBar({
   onCreateWorkspace,
   onDeleteWorkspace,
   onWorkspaceSelect,
-  onWorkspaceNameChange,
-  onWorkspaceNameCommit,
   onAccentColorChange,
   onSaveRequest,
   onImportPostman,
@@ -102,22 +98,12 @@ export function TopBar({
       </div>
 
       <div className="topbar-group workspace-name-group">
-        <label className="field-label" htmlFor="workspace-name">
+        <span className="field-label">
           Name
-        </label>
-        <input
-          id="workspace-name"
-          className="input-text"
-          value={workspaceName}
-          onChange={(event) => onWorkspaceNameChange(event.target.value)}
-          onBlur={onWorkspaceNameCommit}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              onWorkspaceNameCommit();
-            }
-          }}
-          placeholder="Workspace name"
-        />
+        </span>
+        <p className="workspace-name-value" title={workspaceName}>
+          {workspaceName || "Untitled workspace"}
+        </p>
       </div>
 
       <div className="topbar-group topbar-actions">

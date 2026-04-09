@@ -8,9 +8,18 @@ import {
 } from "@/lib/server/normalizers";
 import { toInputJson } from "@/lib/server/prisma-json";
 import { serializeHistory } from "@/lib/server/serializers";
+import type { HistoryRecord } from "@/lib/types/apidedo";
 
 export const runtime = "nodejs";
 export const maxDuration = 45;
+
+function makeLocalHistoryId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `local-${crypto.randomUUID()}`;
+  }
+
+  return `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 interface ExecuteRouteContext {
   params: Promise<{
@@ -38,6 +47,7 @@ export async function POST(request: Request, context: ExecuteRouteContext) {
     const body = (await readJsonBody(request)) as {
       draft?: unknown;
       persistDraft?: unknown;
+      persistHistory?: unknown;
     };
 
     const draft =
@@ -73,21 +83,33 @@ export async function POST(request: Request, context: ExecuteRouteContext) {
       });
     }
 
-    const history = await prisma.history.create({
-      data: {
-        requestId,
-        workspaceId: workspace.id,
-        requestSnapshot: toInputJson(result.requestSnapshot),
-        responseSnapshot: toInputJson(result.responseSnapshot),
-      },
-    });
+    const history: HistoryRecord =
+      body.persistHistory === true
+        ? serializeHistory(
+            await prisma.history.create({
+              data: {
+                requestId,
+                workspaceId: workspace.id,
+                requestSnapshot: toInputJson(result.requestSnapshot),
+                responseSnapshot: toInputJson(result.responseSnapshot),
+              },
+            }),
+          )
+        : {
+            id: makeLocalHistoryId(),
+            requestId,
+            workspaceId: workspace.id,
+            requestSnapshot: result.requestSnapshot,
+            responseSnapshot: result.responseSnapshot,
+            timestamp: new Date().toISOString(),
+          };
 
     return Response.json({
       requestSnapshot: result.requestSnapshot,
       responseSnapshot: result.responseSnapshot,
       updatedVariables: result.updatedVariables,
       scriptLogs: result.scriptLogs,
-      history: serializeHistory(history),
+      history,
     });
   } catch (error) {
     return toErrorResponse(error);

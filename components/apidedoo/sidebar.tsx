@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
 import type {
   ApiRequestRecord,
@@ -168,8 +168,103 @@ interface CollectionItemProps {
   onMoveCollection: (collectionId: string, targetParentId: string | null) => void;
   onMoveRequest: (requestId: string, targetCollectionId: string) => void;
   dropTargetKey: string | null;
+  openMenuKey: string | null;
+  onOpenMenu: (key: string | null) => void;
+  onCloseMenu: () => void;
   onHoverTarget: (key: string) => void;
   onClearHover: () => void;
+}
+
+interface RowMenuItem {
+  id: string;
+  label: string;
+  tone?: "default" | "danger";
+  onSelect: () => void;
+}
+
+interface RowActionMenuProps {
+  buttonLabel: string;
+  menuLabel: string;
+  isOpen: boolean;
+  items: RowMenuItem[];
+  onToggle: () => void;
+  onClose: () => void;
+}
+
+function RowActionMenu({
+  buttonLabel,
+  menuLabel,
+  isOpen,
+  items,
+  onToggle,
+  onClose,
+}: RowActionMenuProps) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
+        onClose();
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen, onClose]);
+
+  return (
+    <div className="row-menu" ref={menuRef}>
+      <button
+        type="button"
+        className="mini-action row-menu-trigger"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        title={buttonLabel}
+      >
+        ...
+      </button>
+
+      {isOpen ? (
+        <div className="row-menu-popover" role="menu" aria-label={menuLabel}>
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`row-menu-item ${item.tone === "danger" ? "danger" : ""}`}
+              onClick={() => {
+                item.onSelect();
+                onClose();
+              }}
+              role="menuitem"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function CollectionItem({
@@ -187,15 +282,43 @@ function CollectionItem({
   onMoveCollection,
   onMoveRequest,
   dropTargetKey,
+  openMenuKey,
+  onOpenMenu,
+  onCloseMenu,
   onHoverTarget,
   onClearHover,
 }: CollectionItemProps) {
   const collectionDropKey = `collection:${node.id}`;
+  const collectionMenuKey = `collection-menu:${node.id}`;
+
+  const collectionMenuItems: RowMenuItem[] = [
+    {
+      id: `add-folder-${node.id}`,
+      label: "Add Folder",
+      onSelect: () => onCreateCollection(node.id),
+    },
+    {
+      id: `add-request-${node.id}`,
+      label: "Add Request",
+      onSelect: () => onCreateRequest(node.id),
+    },
+    {
+      id: `rename-folder-${node.id}`,
+      label: "Rename",
+      onSelect: () => onRenameCollection(node.id),
+    },
+    {
+      id: `delete-folder-${node.id}`,
+      label: "Delete",
+      tone: "danger",
+      onSelect: () => onDeleteCollection(node.id),
+    },
+  ];
 
   return (
     <div className="collection-node">
       <div
-        className={`collection-row ${selectedCollectionId === node.id ? "active" : ""} ${dropTargetKey === collectionDropKey ? "drag-hover" : ""}`}
+        className={`collection-row ${selectedCollectionId === node.id ? "active" : ""} ${dropTargetKey === collectionDropKey ? "drag-hover" : ""} ${openMenuKey === collectionMenuKey ? "menu-open" : ""}`}
         onDragOver={(event) => {
           const payload = readDragPayload(event);
           if (!payload) {
@@ -232,7 +355,10 @@ function CollectionItem({
           type="button"
           className="collection-name"
           style={{ paddingLeft: `${8 + depth * 14}px` }}
-          onClick={() => onSelectCollection(node.id)}
+          onClick={() => {
+            onCloseMenu();
+            onSelectCollection(node.id);
+          }}
           draggable
           onDragStart={(event) =>
             setDragPayload(event, {
@@ -243,96 +369,93 @@ function CollectionItem({
         >
           {node.name}
         </button>
-        <div className="row-actions">
-          <button
-            type="button"
-            className="mini-action"
-            onClick={() => onCreateCollection(node.id)}
-            title="Add child collection"
-          >
-            +F
-          </button>
-          <button
-            type="button"
-            className="mini-action"
-            onClick={() => onCreateRequest(node.id)}
-            title="Add request"
-          >
-            +R
-          </button>
-          <button
-            type="button"
-            className="mini-action"
-            onClick={() => onRenameCollection(node.id)}
-            title="Rename collection"
-          >
-            Rn
-          </button>
-          <button
-            type="button"
-            className="mini-action danger"
-            onClick={() => onDeleteCollection(node.id)}
-            title="Delete collection"
-          >
-            Del
-          </button>
-        </div>
+        <RowActionMenu
+          buttonLabel="Collection actions"
+          menuLabel={`${node.name} actions`}
+          isOpen={openMenuKey === collectionMenuKey}
+          items={collectionMenuItems}
+          onToggle={() =>
+            onOpenMenu(openMenuKey === collectionMenuKey ? null : collectionMenuKey)
+          }
+          onClose={onCloseMenu}
+        />
       </div>
 
-      {node.requests.map((request) => (
-        <div
-          key={request.id}
-          className={`request-row ${selectedRequestId === request.id ? "active" : ""} ${dropTargetKey === `request:${request.id}` ? "drag-hover" : ""}`}
-          onDragOver={(event) => {
-            const payload = readDragPayload(event);
-            if (!payload || payload.type !== "request" || payload.requestId === request.id) {
-              return;
-            }
+      {node.requests.map((request) => {
+        const requestMenuKey = `request-menu:${request.id}`;
 
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-            onHoverTarget(`request:${request.id}`);
-          }}
-          onDragLeave={onClearHover}
-          onDrop={(event) => {
-            const payload = readDragPayload(event);
-            if (!payload || payload.type !== "request" || payload.requestId === request.id) {
-              return;
-            }
+        return (
+          <div
+            key={request.id}
+            className={`request-row ${selectedRequestId === request.id ? "active" : ""} ${dropTargetKey === `request:${request.id}` ? "drag-hover" : ""} ${openMenuKey === requestMenuKey ? "menu-open" : ""}`}
+            onDragOver={(event) => {
+              const payload = readDragPayload(event);
+              if (!payload || payload.type !== "request" || payload.requestId === request.id) {
+                return;
+              }
 
-            event.preventDefault();
-            onClearHover();
-            onMoveRequest(payload.requestId, node.id);
-          }}
-        >
-          <button
-            type="button"
-            className="request-name"
-            style={{ paddingLeft: `${26 + depth * 14}px` }}
-            onClick={() => onSelectRequest(request.id)}
-            draggable
-            onDragStart={(event) =>
-              setDragPayload(event, {
-                type: "request",
-                requestId: request.id,
-              })
-            }
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+              onHoverTarget(`request:${request.id}`);
+            }}
+            onDragLeave={onClearHover}
+            onDrop={(event) => {
+              const payload = readDragPayload(event);
+              if (!payload || payload.type !== "request" || payload.requestId === request.id) {
+                return;
+              }
+
+              event.preventDefault();
+              onClearHover();
+              onMoveRequest(payload.requestId, node.id);
+            }}
           >
-            <span className={`method-pill method-${request.draft.method.toLowerCase()}`}>
-              {request.draft.method}
-            </span>
-            <span>{request.name}</span>
-          </button>
-          <button
-            type="button"
-            className="mini-action danger"
-            onClick={() => onDeleteRequest(request.id)}
-            title="Delete request"
-          >
-            Del
-          </button>
-        </div>
-      ))}
+            <button
+              type="button"
+              className="request-name"
+              style={{ paddingLeft: `${26 + depth * 14}px` }}
+              onClick={() => {
+                onCloseMenu();
+                onSelectRequest(request.id);
+              }}
+              draggable
+              onDragStart={(event) =>
+                setDragPayload(event, {
+                  type: "request",
+                  requestId: request.id,
+                })
+              }
+            >
+              <span className={`method-pill method-${request.draft.method.toLowerCase()}`}>
+                {request.draft.method}
+              </span>
+              <span>{request.name}</span>
+            </button>
+            <RowActionMenu
+              buttonLabel="Request actions"
+              menuLabel={`${request.name} actions`}
+              isOpen={openMenuKey === requestMenuKey}
+              items={[
+                {
+                  id: `open-request-${request.id}`,
+                  label: "Open",
+                  onSelect: () => onSelectRequest(request.id),
+                },
+                {
+                  id: `delete-request-${request.id}`,
+                  label: "Delete",
+                  tone: "danger",
+                  onSelect: () => onDeleteRequest(request.id),
+                },
+              ]}
+              onToggle={() =>
+                onOpenMenu(openMenuKey === requestMenuKey ? null : requestMenuKey)
+              }
+              onClose={onCloseMenu}
+            />
+          </div>
+        );
+      })}
 
       {node.children.map((child) => (
         <CollectionItem
@@ -351,6 +474,9 @@ function CollectionItem({
           onMoveCollection={onMoveCollection}
           onMoveRequest={onMoveRequest}
           dropTargetKey={dropTargetKey}
+          openMenuKey={openMenuKey}
+          onOpenMenu={onOpenMenu}
+          onCloseMenu={onCloseMenu}
           onHoverTarget={onHoverTarget}
           onClearHover={onClearHover}
         />
@@ -380,6 +506,7 @@ export function Sidebar({
   onSaveVariables,
 }: SidebarProps) {
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
 
   const tree = useMemo(
     () => (workspace ? buildCollectionTree(workspace.collections, workspace.requests) : []),
@@ -388,7 +515,7 @@ export function Sidebar({
 
   return (
     <aside className="sidebar-panel">
-      <section className="sidebar-section">
+      <section className="sidebar-section collections-section">
         <div className="section-title-row">
           <h2>Collections</h2>
           <button type="button" className="ghost-button" onClick={() => onCreateCollection(null)}>
@@ -398,6 +525,7 @@ export function Sidebar({
 
         <div
           className={`root-drop-target ${dropTargetKey === "root" ? "drag-hover" : ""}`}
+          aria-label="Drop collection here to move to root"
           onDragOver={(event) => {
             const payload = readDragPayload(event);
             if (!payload || payload.type !== "collection") {
@@ -419,9 +547,7 @@ export function Sidebar({
             setDropTargetKey(null);
             onMoveCollection(payload.collectionId, null);
           }}
-        >
-          Drag a folder here to move it to root level.
-        </div>
+        />
 
         <div className="tree-wrap">
           {tree.length === 0 ? (
@@ -444,6 +570,9 @@ export function Sidebar({
                 onMoveCollection={onMoveCollection}
                 onMoveRequest={onMoveRequest}
                 dropTargetKey={dropTargetKey}
+                openMenuKey={openMenuKey}
+                onOpenMenu={setOpenMenuKey}
+                onCloseMenu={() => setOpenMenuKey(null)}
                 onHoverTarget={(key) => setDropTargetKey(key)}
                 onClearHover={() => setDropTargetKey(null)}
               />

@@ -188,12 +188,14 @@ export async function executeRequest(params: {
   requestId: string;
   draft: ApiRequestDraft;
   persistDraft?: boolean;
+  persistHistory?: boolean;
 }): Promise<ExecuteResponse> {
   return requestJson<ExecuteResponse>(`/api/requests/${params.requestId}/execute`, {
     method: "POST",
     body: JSON.stringify({
       draft: params.draft,
       persistDraft: params.persistDraft ?? false,
+      persistHistory: params.persistHistory ?? false,
     }),
   });
 }
